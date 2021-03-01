@@ -48,10 +48,10 @@ from performance_metrics import PerformanceMetrics
 
 class arguments:
     def __init__(self):
-        self.model = "/home/ubuntu/catkin_ws/src/beacon_cam/src/yolov3/v5/frozen_darknet_yolov3_model.xml"
+        self.model = "/home/ubuntu/catkin_ws/src/beacon_cam/src/yolov4/frozen_darknet_yolov4_model.xml"
         self.device = "MYRIAD"
-        self.labels = ""#"/home/ubuntu/catkin_ws/src/beacon_cam/src/yolov3/labels_map.txt"
-        self.prob_threshold = 0.5
+        self.labels = ""#"/home/ubuntu/catkin_ws/src/beacon_cam/src/yolov4/labels_map.txt"
+        self.prob_threshold = [0.9,0.8]
         self.iou_threshold = 0.4
         self.nireq = 1
         self.raw_output_message = False
@@ -230,7 +230,7 @@ def filter_objects(objects, iou_threshold, prob_threshold):
             if intersection_over_union(objects[i], objects[j]) > iou_threshold:
                 objects[j]['confidence'] = 0
 
-    return tuple(obj for obj in objects if obj['confidence'] >= prob_threshold)
+    return tuple(obj for obj in objects if obj['confidence'] >= prob_threshold[obj['class_id']])
 
 
 def async_callback(status, callback_args):
@@ -253,25 +253,12 @@ def async_callback(status, callback_args):
 
 def await_requests_completion(requests):
     for request in requests:
-        request.wait()
-
-def tf_mtx(x1, y1, x2, y2, xp1, yp1, xp2,yp2):
-    b = (xp2-x2/x1*xp1)/(y2-x2*y1/x1)
-    a = (xp1 - y1*b)/x1
-    d = (yp2-x2/x1*yp1)/(y2-x2*y1/x1)
-    c = (yp1 - y1*d)/x1
-    return [a,b,c,d]
-
-def tf(x,y,mtx):
-    xp = round(mtx[0]*x+mtx[1]*y,1)
-    yp = round(mtx[2]*x+mtx[3]*y+0.0000001,1)
-    return (xp,yp)    
+        request.wait() 
 
 def main():
     #args = build_argparser().parse_args()
     args = arguments()
     args.no_show = False
-    tfmtx = tf_mtx(args.corner[0][0],args.corner[0][1],args.corner[1][0],args.corner[1][1],3000,2000,3000,0)
     
     #ros publisher
     pub = rospy.Publisher('beacon_camera', String, queue_size=10)
@@ -399,22 +386,24 @@ def main():
 
             origin_im_size = frame.shape[:-1]
             presenter.drawGraphs(frame)
+            label_one_axis = list()
             for obj in objects:
                 # Validation bbox of detected object
                 obj['xmax'] = min(obj['xmax'], origin_im_size[1])
                 obj['ymax'] = min(obj['ymax'], origin_im_size[0])
                 obj['xmin'] = max(obj['xmin'], 0)
                 obj['ymin'] = max(obj['ymin'], 0)
-                xavg = int((obj['xmax']+obj['xmin'])/2)
-                yavg = int((obj['ymax']+obj['ymin']*4)/5)
-                #text_depth = "Distance to ({},{}):".format(xavg,yavg)+str(np.round(depth_frame.get_distance(xavg, yavg),2))+"meter(s)"
-                #"""
                 color = (min(obj['class_id'] * 12.5, 255),
                          min(obj['class_id'] * 7, 255),
                          min(obj['class_id'] * 5, 255))
-                #"""
+                xavg = int((obj['xmin']+obj['xmax'])/2)
+                yavg = int((obj['ymin']+obj['ymax']*7)/8)
                 det_label = labels_map[obj['class_id']] if labels_map and len(labels_map) >= obj['class_id'] else \
                     str(obj['class_id'])
+                if obj['class_id'] == 1:
+                    label_one_axis.append([[obj['xmin'],obj['ymin']],[obj['xmax'],obj['ymax']]])
+                else:
+                    
 
                 if args.raw_output_message:
                     rospy.loginfo(
@@ -422,17 +411,39 @@ def main():
                                                                                   obj['xmin'], obj['ymin'], obj['xmax'],
                                                                                   obj['ymax'],
                                                                                   color))
-                xp, yp = tf(xavg, yavg, tfmtx)
-                location = "{},{}".format(xp,yp) #world axis if calibrated
-                text_publish = det_label.split(" ")[0]+" "+location
+                text_publish = det_label.split(" ")[0]
                 rospy.loginfo(text_publish)
                 pub.publish(text_publish)
-            #"""
                 cv2.rectangle(frame, (obj['xmin'], obj['ymin']), (obj['xmax'], obj['ymax']), color, 2)
                 cv2.putText(frame,
                             "#" + det_label + ' ' + str(round(obj['confidence'] * 100, 1)) + ' % ',#+text_depth,
                             (obj['xmin'], obj['ymin'] - 7), cv2.FONT_HERSHEY_COMPLEX, 0.6, color, 1)
-                
+                            
+            #Five cups colors if well detected in right region  (lab_frame、is_green、is_red not defined) 
+            index_1 = 0
+            index_2 = 0
+            for i in range(len(label_one_axis)):
+                if label_one_axis[i][0][0] < label_one_axis[index_1][0][0]:
+                    index_1 = i
+                if label_one_axis[i][1][0] > label_one_axis[index_2][1][0]:
+                    index_2 = i
+            lenth_to_detect = int(round(label_one_axis[index_2][1][1] - label_one_axis[index_1][0][1]))
+            mid_x_point = int((label_one_axis[index_1][0][0]+label_one_axis[index_2][1][0])/2)
+            start = label_one_axis[index_1][0][1]
+            colors = [-1,-1,-1,-1,-1] # 0 for green 1 for red -1 for no cup
+            for i in range(5):
+                target_color = [0,0]
+                for j in lenth_to_detect:
+                    if is_green(lab_frame, mid_x_point, j):
+                        target_color[0] += 1
+                    elif is_red(lab_frame, mid_x_point, j):
+                        target_color[1] += 1
+                if target_color[0] > int(lenth_to_detect/2):
+                    colors[i] = 0
+                elif target_color[1] > int(lenth_to_detect/2):
+                    colors[i] = 1
+                start  = start + lenth_to_detect
+            #end
             helpers.put_highlighted_text(frame, "{} mode".format(mode.current.name), (10, int(origin_im_size[0] - 20)),
                                          cv2.FONT_HERSHEY_COMPLEX, 0.75, (10, 10, 200), 2)
             
@@ -444,7 +455,6 @@ def main():
                 helpers.put_highlighted_text(frame, "Switching modes, please wait...",
                                              (10, int(origin_im_size[0] - 50)), cv2.FONT_HERSHEY_COMPLEX, 0.75,
                                              (10, 200, 10), 2)
-            #"""
             if not args.no_show:
                 cv2.circle(frame,args.corner[0],2,(255,255,255),-1)
                 cv2.circle(frame,args.corner[1],2,(255,255,255),-1)
