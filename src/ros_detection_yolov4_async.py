@@ -69,7 +69,7 @@ class arguments:
             with open(self.color_file,'r') as cf:
                 for line in cf:
                     line_split = line.split(" ")
-                    self.color_range[line_split[0]] = [line_split[1], line_split[2], line_split[3], line_split[4]]
+                    self.color_range[line_split[0]] = [float(line_split[1]), float(line_split[2]), float(line_split[3]), float(line_split[4])]
         except OSError as e:
             rospy.loginfo(e)
             exit(1)
@@ -151,7 +151,7 @@ def parse_yolo_region(predictions, resized_image_shape, original_im_shape, param
         bbox = predictions[0, n*bbox_size:(n+1)*bbox_size, row, col]
         x, y, width, height, object_probability = bbox[:5]
         class_probabilities = bbox[5:]
-        if object_probability < threshold:
+        if object_probability < 0.5:
             continue
         # Process raw value
         x = (col + x) / params.side
@@ -168,7 +168,7 @@ def parse_yolo_region(predictions, resized_image_shape, original_im_shape, param
 
         class_id = np.argmax(class_probabilities)
         confidence = class_probabilities[class_id]*object_probability
-        if confidence < threshold:
+        if confidence < 0.5:
             continue
         objects.append(scale_bbox(x=x, y=y, height=height, width=width, class_id=class_id, confidence=confidence,
                                   im_h=orig_im_h, im_w=orig_im_w, is_proportional=is_proportional))
@@ -380,7 +380,7 @@ def main():
         color_frame = frames.get_color_frame()
         #depth_frame = frames.get_depth_frame()
         return 0 if not color_frame else 1
-    def color_dtm(lab_frame, x, y, color_range): #if green then return 0,red then return 1,else then 2
+    def color_dtm(lab_frame, y, x, color_range): #if green then return 0,red then return 1,else then 2
         a = lab_frame[x, y, 1]
         b = lab_frame[x, y, 2]
         green = color_range['green']
@@ -441,35 +441,45 @@ def main():
                                                                                   obj['xmin'], obj['ymin'], obj['xmax'],
                                                                                   obj['ymax'],
                                                                                   color))
-                text_publish = det_label.split(" ")[0]
-                rospy.loginfo(text_publish)
-                pub.publish(text_publish)
+                #text_publish = det_label.split(" ")[0]
+                #rospy.loginfo(text_publish)
+                #pub.publish(text_publish)
                 cv2.rectangle(frame, (obj['xmin'], obj['ymin']), (obj['xmax'], obj['ymax']), color, 2)
                 cv2.putText(frame,
                             "#" + det_label + ' ' + str(round(obj['confidence'] * 100, 1)) + ' % ',#+text_depth,
                             (obj['xmin'], obj['ymin'] - 7), cv2.FONT_HERSHEY_COMPLEX, 0.6, color, 1)
-                            
+            rospy.loginfo(label_zero_axis)
             #Five cups colors if well detected in right region
-            index_1 = 0
-            index_2 = 0
-            for i in range(len(label_one_axis)):
-                if label_one_axis[i][0][0] < label_one_axis[index_1][0][0]:
-                    index_1 = i
-                if label_one_axis[i][1][0] > label_one_axis[index_2][1][0]:
-                    index_2 = i
-            lenth_to_detect = int(round(label_one_axis[index_2][1][1] - label_one_axis[index_1][0][1]))
-            mid_x_point = int((label_one_axis[index_1][0][0]+label_one_axis[index_2][1][0])/2)
-            start = label_one_axis[index_1][0][1]
-            colors = [-1,-1,-1,-1,-1] # 0 for green 1 for red -1 for no cup
-            for i in range(5):
-                target_color = [0,0,0]
-                for j in lenth_to_detect:
-                    target_color[color_dtm(lab_frame, mid_x_point, j, args.color_range)] += 1
-                if target_color[0] > int(lenth_to_detect/2):
-                    colors[i] = 0
-                elif target_color[1] > int(lenth_to_detect/2):
-                    colors[i] = 1
-                start  = start + lenth_to_detect
+            if any(label_one_axis):
+                index_1 = 0
+                index_2 = 0
+                for i in range(len(label_one_axis)):
+                    if label_one_axis[i][0][0] < label_one_axis[index_1][0][0]:
+                        index_1 = i
+                    if label_one_axis[i][1][0] > label_one_axis[index_2][1][0]:
+                        index_2 = i
+                lenth_to_detect = int(round(label_one_axis[index_2][1][1] - label_one_axis[index_1][0][1]))
+                mid_x_point = int((label_one_axis[index_1][0][0]+label_one_axis[index_2][1][0])/2)
+                start = label_one_axis[index_1][0][1]
+                colors = [-1,-1,-1,-1,-1] # 0 for green 1 for red -1 for no cup
+                for i in range(5):
+                    target_color = [0,0,0]
+                    for j in range(lenth_to_detect):
+                        target_color[color_dtm(lab_frame, mid_x_point, j, args.color_range)] += 1
+                    if target_color[0] > int(lenth_to_detect/2):
+                        colors[i] = 0
+                    elif target_color[1] > int(lenth_to_detect/2):
+                        colors[i] = 1
+                    start  = start + lenth_to_detect
+                colors_message = []
+                for i in colors:
+                    if i == 0:
+                        colors_message.append("green")
+                    elif i == 1:
+                        colors_message.append("red")
+                    else:
+                        colors_message.append("no cup")
+                rospy.loginfo(colors_message)
             #end
             helpers.put_highlighted_text(frame, "{} mode".format(mode.current.name), (10, int(origin_im_size[0] - 20)),
                                          cv2.FONT_HERSHEY_COMPLEX, 0.75, (10, 10, 200), 2)
