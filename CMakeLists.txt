@@ -209,5 +209,5 @@ include_directories(
 
 find_package(OpenCV)
 include_directories(${OpenCV_INCLUDE_DIRS})
-catkin_install_python(PROGRAMS src/ros_detection_yolov3_async.py
+catkin_install_python(PROGRAMS src/ros_detection_yolov4_async.py
                       DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
