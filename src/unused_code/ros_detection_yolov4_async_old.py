@@ -341,12 +341,7 @@ def main():
     config = rs.config()
     config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
     config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-    profile = pipeline.start(config)
-    depth_sensor = profile.get_device().first_depth_sensor()
-    if depth_sensor.supports(rs.option.depth_units):
-        depth_sensor.set_option(rs.option.depth_units,0.001)
-    depth_scale = depth_sensor.get_depth_scale()
-    print("Depth Scale is: " , depth_scale)
+    pipeline.start(config)
     align_to = rs.stream.color
     align = rs.align(align_to)
 
@@ -419,12 +414,8 @@ def main():
 
             origin_im_size = frame.shape[:-1]
             presenter.drawGraphs(frame)
-            
-            depth_intrin = depth_frame.profile.as_video_stream_profile().intrinsics
-            depth_image = np.asanyarray(depth_frame.get_data())
-            
-            label_zero_point = []
-            label_one_pixel = []
+            label_zero_axis = []
+            label_one_axis = []
             for obj in objects:
                 # Validation bbox of detected object
                 obj['xmax'] = min(obj['xmax'], origin_im_size[1])
@@ -439,10 +430,9 @@ def main():
                 det_label = labels_map[obj['class_id']] if labels_map and len(labels_map) >= obj['class_id'] else \
                     str(obj['class_id'])
                 if obj['class_id'] == 1:
-                    label_one_pixel.append([[obj['xmin'],obj['ymin']],[obj['xmax'],obj['ymax']]])
+                    label_one_axis.append([[obj['xmin'],obj['ymin']],[obj['xmax'],obj['ymax']]])
                 elif obj['class_id'] == 0:
-                    depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, [xavg, yavg], depth_scale)
-                    label_zero_pixel.append([depth_point,color_dtm(lab_frame, xavg, yavg, args.color_range)])
+                    label_zero_axis.append([[xavg, yavg],color_dtm(lab_frame, xavg, yavg, args.color_range)])
                     
 
                 if args.raw_output_message:
@@ -458,19 +448,19 @@ def main():
                 cv2.putText(frame,
                             "#" + det_label + ' ' + str(round(obj['confidence'] * 100, 1)) + ' % ',#+text_depth,
                             (obj['xmin'], obj['ymin'] - 7), cv2.FONT_HERSHEY_COMPLEX, 0.6, color, 1)
-            rospy.loginfo(label_zero_pixel)
+            rospy.loginfo(label_zero_axis)
             #Five cups colors if well detected in right region
-            if any(label_one_pixel):
+            if any(label_one_axis):
                 index_1 = 0
                 index_2 = 0
-                for i in range(len(label_one_pixel)):
-                    if label_one_pixel[i][0][0] < label_one_pixel[index_1][0][0]:
+                for i in range(len(label_one_axis)):
+                    if label_one_axis[i][0][0] < label_one_axis[index_1][0][0]:
                         index_1 = i
-                    if label_one_pixel[i][1][0] > label_one_pixel[index_2][1][0]:
+                    if label_one_axis[i][1][0] > label_one_axis[index_2][1][0]:
                         index_2 = i
-                lenth_to_detect = int(round(label_one_pixel[index_2][1][1] - label_one_pixel[index_1][0][1]))
-                mid_x_point = int((label_one_pixel[index_1][0][0]+label_one_pixel[index_2][1][0])/2)
-                start = label_one_pixel[index_1][0][1]
+                lenth_to_detect = int(round(label_one_axis[index_2][1][1] - label_one_axis[index_1][0][1]))
+                mid_x_point = int((label_one_axis[index_1][0][0]+label_one_axis[index_2][1][0])/2)
+                start = label_one_axis[index_1][0][1]
                 colors = [-1,-1,-1,-1,-1] # 0 for green 1 for red -1 for no cup
                 for i in range(5):
                     target_color = [0,0,0]
