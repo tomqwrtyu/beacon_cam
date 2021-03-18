@@ -439,13 +439,13 @@ def main():
                 det_label = labels_map[obj['class_id']] if labels_map and len(labels_map) >= obj['class_id'] else \
                     str(obj['class_id'])
                 if obj['class_id'] == 1:
-                    label_one_pixel.append([[obj['xmin'],obj['ymin']],[obj['xmax'],obj['ymax']]])
+                    continue
+                    #label_one_pixel.append([[obj['xmin'],obj['ymin']],[obj['xmax'],obj['ymax']]])
                 elif obj['class_id'] == 0:
                     real_depth = depth_frame.get_distance(xavg,yavg)
-                    #print(real_depth)
                     depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, [xavg, obj['ymax']], real_depth/depth_scale)
                     label_zero_point.append([depth_point,color_dtm(lab_frame, xavg, yavg, args.color_range)])
-                    
+                    # 0 = green,1 = red,2 = others
 
                 if args.raw_output_message:
                     rospy.loginfo(
@@ -460,7 +460,13 @@ def main():
                 cv2.putText(frame,
                             "#" + det_label + ' ' + str(round(obj['confidence'] * 100, 1)) + ' % ',#+text_depth,
                             (obj['xmin'], obj['ymin'] - 7), cv2.FONT_HERSHEY_COMPLEX, 0.6, color, 1)
-            rospy.loginfo(label_zero_point)
+            if any(label_zero_point):
+                detect_target = [x  for x in label_zero_point if not x[1] == 2]
+                maybe_target = [x  for x in label_zero_point if x[1] == 2]
+                rospy.loginfo("Detected cups:")
+                rospy.loginfo(detect_target)
+                rospy.loginfo("Might be cup but in wrong color:")
+                rospy.loginfo(maybe_target)
             #Five cups colors if well detected in right region
             if any(label_one_pixel):
                 index_1 = 0
