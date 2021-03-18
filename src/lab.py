@@ -5,6 +5,7 @@ import cv2
 import glob
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.colors as colors
 
 def getData():
     def getMeanAndThresh(color):
@@ -28,12 +29,12 @@ def getData():
             A = np.append(A,a) 
             B = np.append(B,b)
         meanA = round(np.mean(A),0)
-        threshA = round(2.58*np.std(A, ddof=1),0)
+        threshA = round(2*np.std(A, ddof=1),0)
         meanB = round(np.mean(B),0)
-        threshB = round(2.58*np.std(B, ddof=1),0)
+        threshB = round(2*np.std(B, ddof=1),0)
         """
         nbins = 10 
-        plt.hist2d(A, B, bins=nbins, norm=matplotlib.colors.LogNorm()) 
+        plt.hist2d(A, B, bins=nbins, norm=colors.LogNorm()) 
         plt.title('red')
         plt.xlabel('A') 
         plt.ylabel('B') 
