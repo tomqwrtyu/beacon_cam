@@ -34,6 +34,7 @@ from openvino.inference_engine import IECore
 
 import rospy
 from std_msgs.msg import String
+from beacon_cam.srv import *
 
 #import keyboard 
 
@@ -265,6 +266,59 @@ def await_requests_completion(requests):
     for request in requests:
         request.wait() 
 
+
+def rs_isOpened(pipeline):
+    frames = pipeline.wait_for_frames()
+    color_frame = frames.get_color_frame()
+    #depth_frame = frames.get_depth_frame()
+    return 0 if not color_frame else 1
+
+
+def color_dtm(lab_frame, y, x, diff, color_range): #if green then return 0,red then return 1,else then 2
+    examine_axes_list = []
+    x = x - diff
+    y = y - diff
+    green = color_range['green']
+    red = color_range['red']
+    green_count = 0
+    red_count = 0
+    for i in range(3):
+        for j in range(3):
+            examine_axes_list.append([x+diff*i,y+diff*j])
+    for axis in examine_axes_list:
+        a = lab_frame[x, y, 1]
+        b = lab_frame[x, y, 2]
+    
+        if (a < green[0]+green[1] and a > green[0]-green[1]) \
+             and ((b < green[2]+green[3] and b > green[2]-green[3])):
+            green_count += 1
+        elif (a < red[0]+red[1] and a > red[0]-red[1]) \
+             and ((b < red[2]+red[3] and b > red[2]-red[3])):
+            red_count += 1
+    if green_count >= 5:
+        return 0
+    elif red_count >= 5:
+        return 1
+    else:
+        return 2
+
+class beacon_cam_server():
+    def __init__(self):
+        self.LastStorage = []
+        
+    def _request_handler(self,request):
+        response = cup_cameraResponse()
+        if request.req:
+            response.color = self.LastStorage[0]
+            flat_list = [item for sublist in self.LastStorage[1] for item in sublist]
+            response.cup_pos = flat_list
+            return response
+        else:
+            return response
+    def start(self):
+        rospy.init_node('cup_camera')
+        service = rospy.Service('cup_camera', cup_camera, self._request_handler)
+
 def main():
     #args = build_argparser().parse_args()
     args = arguments()
@@ -273,9 +327,13 @@ def main():
         lab.getData()
     args.load_range()
     
-    #ros publisher
-    pub = rospy.Publisher('beacon_camera', String, queue_size=10)
-    rospy.init_node('beacon_camera', anonymous=True)
+    #publisher
+    #rospy.init_node('beacon_camera', anonymous=True)
+    #pub = rospy.Publisher('beacon_camera', String, queue_size=10)
+    
+    #server
+    ros_server = beacon_cam_server()
+    ros_server.start()
     
 
     # ------------- 1. Plugin initialization for specified device and load extensions library if specified -------------
@@ -343,10 +401,11 @@ def main():
     config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
     profile = pipeline.start(config)
     depth_sensor = profile.get_device().first_depth_sensor()
+    depth_sensor.set_option(rs.option.enable_auto_exposure, False)
     if depth_sensor.supports(rs.option.depth_units):
         depth_sensor.set_option(rs.option.depth_units,0.001)
     depth_scale = depth_sensor.get_depth_scale()
-    print("Depth Scale is: " , depth_scale)
+    #print("Depth Scale is: " , depth_scale)
     align_to = rs.stream.color
     align = rs.align(align_to)
 
@@ -379,25 +438,6 @@ def main():
 
     presenter = monitors.Presenter(args.utilization_monitors, 55, 640, 480)
         #(round(cap.get(cv2.CAP_PROP_FRAME_WIDTH) / 4), round(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) / 8)))
-        
-    def rs_isOpened(pipeline):
-        frames = pipeline.wait_for_frames()
-        color_frame = frames.get_color_frame()
-        #depth_frame = frames.get_depth_frame()
-        return 0 if not color_frame else 1
-    def color_dtm(lab_frame, y, x, color_range): #if green then return 0,red then return 1,else then 2
-        a = lab_frame[x, y, 1]
-        b = lab_frame[x, y, 2]
-        green = color_range['green']
-        red = color_range['red']
-        if (a < green[0]+green[1] and a > green[0]-green[1]) \
-             and ((b < green[2]+green[3] and b > green[2]-green[3])):
-            return 0
-        elif (a < red[0]+red[1] and a > red[0]-red[1]) \
-             and ((b < red[2]+red[3] and b > red[2]-red[3])):
-            return 1
-        else:
-            return 2
             
     
     while (rs_isOpened(pipeline) \
@@ -435,7 +475,8 @@ def main():
                          min(obj['class_id'] * 7, 255),
                          min(obj['class_id'] * 5, 255))
                 xavg = int((obj['xmin']+obj['xmax'])/2)
-                yavg = int((obj['ymin']+obj['ymax']*9)/10)
+                yavg = int((obj['ymin']*8+obj['ymax']*2)/10)
+                diff = int(((obj['ymax']-obj['ymin'])+(obj['xmax']-obj['xmin']))/8)
                 det_label = labels_map[obj['class_id']] if labels_map and len(labels_map) >= obj['class_id'] else \
                     str(obj['class_id'])
                 if obj['class_id'] == 1:
@@ -444,7 +485,7 @@ def main():
                 elif obj['class_id'] == 0:
                     real_depth = depth_frame.get_distance(xavg,yavg)
                     depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, [xavg, obj['ymax']], real_depth/depth_scale)
-                    label_zero_point.append([depth_point,color_dtm(lab_frame, xavg, yavg, args.color_range)])
+                    label_zero_point.append([depth_point,color_dtm(lab_frame, xavg, yavg, diff, args.color_range)])
                     # 0 = green,1 = red,2 = others
 
                 if args.raw_output_message:
@@ -453,20 +494,15 @@ def main():
                                                                                   obj['xmin'], obj['ymin'], obj['xmax'],
                                                                                   obj['ymax'],
                                                                                   color))
-                #text_publish = det_label.split(" ")[0]
-                #rospy.loginfo(text_publish)
-                #pub.publish(text_publish)
                 cv2.rectangle(frame, (obj['xmin'], obj['ymin']), (obj['xmax'], obj['ymax']), color, 2)
                 cv2.putText(frame,
-                            "#" + det_label + ' ' + str(round(obj['confidence'] * 100, 1)) + ' % ',#+text_depth,
+                            "#" + det_label + ' ' + str(round(obj['confidence'] * 100, 1)) + ' % ',
                             (obj['xmin'], obj['ymin'] - 7), cv2.FONT_HERSHEY_COMPLEX, 0.6, color, 1)
             if any(label_zero_point):
                 detect_target = [x  for x in label_zero_point if not x[1] == 2]
                 maybe_target = [x  for x in label_zero_point if x[1] == 2]
-                rospy.loginfo("Detected cups:")
-                rospy.loginfo(detect_target)
-                rospy.loginfo("Might be cup but in wrong color:")
-                rospy.loginfo(maybe_target)
+                ros_server.LastStorage = [[x[1] for x in label_zero_point],[x[0] for x in label_zero_point]]
+                print(ros_server.LastStorage)
             #Five cups colors if well detected in right region
             if any(label_one_pixel):
                 index_1 = 0
