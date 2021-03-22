@@ -34,6 +34,7 @@ from openvino.inference_engine import IECore
 
 import rospy
 from std_msgs.msg import String
+from std_msgs.msg import Float32MultiArray
 from beacon_cam.srv import *
 
 #import keyboard 
@@ -278,6 +279,7 @@ def color_dtm(lab_frame, y, x, diff, color_range): #if green then return 0,red t
     examine_axes_list = []
     x = x - diff
     y = y - diff
+    #print(y,x,diff)
     green = color_range['green']
     red = color_range['red']
     green_count = 0
@@ -316,8 +318,18 @@ class beacon_cam_server():
         else:
             return response
     def start(self):
-        rospy.init_node('cup_camera')
+        rospy.init_node('beacon_camera')
         service = rospy.Service('cup_camera', cup_camera, self._request_handler)
+
+def get_transformed_points(points):
+    rospy.wait_for_service('point_transform')
+    try:
+        transform = rospy.ServiceProxy('point_transform', point_transform)
+        res = transform(points)
+        return res
+    except rospy.ServiceException:
+         rospy.loginfo('Service call failed.')
+        
 
 def main():
     #args = build_argparser().parse_args()
@@ -327,14 +339,10 @@ def main():
         lab.getData()
     args.load_range()
     
-    #publisher
-    #rospy.init_node('beacon_camera', anonymous=True)
-    #pub = rospy.Publisher('beacon_camera', String, queue_size=10)
-    
     #server
     ros_server = beacon_cam_server()
     ros_server.start()
-    
+
 
     # ------------- 1. Plugin initialization for specified device and load extensions library if specified -------------
     rospy.loginfo("Creating Inference Engine...")
@@ -401,7 +409,7 @@ def main():
     config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
     profile = pipeline.start(config)
     depth_sensor = profile.get_device().first_depth_sensor()
-    depth_sensor.set_option(rs.option.enable_auto_exposure, False)
+    #depth_sensor.set_option(rs.option.enable_auto_exposure, False)
     if depth_sensor.supports(rs.option.depth_units):
         depth_sensor.set_option(rs.option.depth_units,0.001)
     depth_scale = depth_sensor.get_depth_scale()
@@ -476,7 +484,7 @@ def main():
                          min(obj['class_id'] * 5, 255))
                 xavg = int((obj['xmin']+obj['xmax'])/2)
                 yavg = int((obj['ymin']*8+obj['ymax']*2)/10)
-                diff = int(((obj['ymax']-obj['ymin'])+(obj['xmax']-obj['xmin']))/8)
+                diff = int(((obj['ymax']-obj['ymin'])+(obj['xmax']-obj['xmin']))/16)
                 det_label = labels_map[obj['class_id']] if labels_map and len(labels_map) >= obj['class_id'] else \
                     str(obj['class_id'])
                 if obj['class_id'] == 1:
@@ -501,8 +509,9 @@ def main():
             if any(label_zero_point):
                 detect_target = [x  for x in label_zero_point if not x[1] == 2]
                 maybe_target = [x  for x in label_zero_point if x[1] == 2]
-                ros_server.LastStorage = [[x[1] for x in label_zero_point],[x[0] for x in label_zero_point]]
-                print(ros_server.LastStorage)
+                transformed_label_zero_point = [get_transformed_points(x[0]) for x in label_zero_point]
+                ros_server.LastStorage = [[x[1] for x in label_zero_point],[x.tf_pos for x in transformed_label_zero_point]]
+                rospy.loginfo(ros_server.LastStorage)
             #Five cups colors if well detected in right region
             if any(label_one_pixel):
                 index_1 = 0
