@@ -286,7 +286,11 @@ def color_dtm(lab_frame, y, x, diff, color_range): #if green then return 0,red t
     red_count = 0
     for i in range(3):
         for j in range(3):
-            examine_axes_list.append([x+diff*i,y+diff*j])
+            if i == 0 or i == 2:
+                if j == 1:
+                    examine_axes_list.append([x+diff*i,y+diff*j])
+            else:
+                 examine_axes_list.append([x+diff*i,y+diff*j])
     for axis in examine_axes_list:
         a = lab_frame[x, y, 1]
         b = lab_frame[x, y, 2]
@@ -483,7 +487,7 @@ def main():
                          min(obj['class_id'] * 7, 255),
                          min(obj['class_id'] * 5, 255))
                 xavg = int((obj['xmin']+obj['xmax'])/2)
-                yavg = int((obj['ymin']*8+obj['ymax']*2)/10)
+                yavg = int((obj['ymin']+obj['ymax'])/2)
                 diff = int(((obj['ymax']-obj['ymin'])+(obj['xmax']-obj['xmin']))/16)
                 det_label = labels_map[obj['class_id']] if labels_map and len(labels_map) >= obj['class_id'] else \
                     str(obj['class_id'])
@@ -528,7 +532,7 @@ def main():
                 for i in range(5):
                     target_color = [0,0,0]
                     for j in range(lenth_to_detect):
-                        target_color[color_dtm(lab_frame, mid_x_point, j, args.color_range)] += 1
+                        target_color[color_dtm(lab_frame, mid_x_point, j, 2,args.color_range)] += 1
                     if target_color[0] > int(lenth_to_detect/2):
                         colors[i] = 0
                     elif target_color[1] > int(lenth_to_detect/2):
