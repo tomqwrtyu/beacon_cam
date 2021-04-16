@@ -54,7 +54,7 @@ class arguments:
         self.model = "/home/ubuntu/catkin_ws/src/beacon_cam/src/yolov4/frozen_darknet_yolov4_model.xml"
         self.device = "MYRIAD"
         self.labels = ""#"/home/ubuntu/catkin_ws/src/beacon_cam/src/yolov4/labels_map.txt"
-        self.prob_threshold = [0.9,0.8]
+        self.prob_threshold = [0.92,0.92]
         self.iou_threshold = 0.4
         self.nireq = 1
         self.raw_output_message = False
@@ -409,8 +409,10 @@ def main():
     
     pipeline = rs.pipeline()
     config = rs.config()
-    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+    #config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+    #config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+    config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 15)
+    config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 30)
     profile = pipeline.start(config)
     depth_sensor = profile.get_device().first_depth_sensor()
     #depth_sensor.set_option(rs.option.enable_auto_exposure, False)
@@ -448,7 +450,7 @@ def main():
     #print("To close the application, press 'CTRL+C' here or switch to the output window and press ESC key")
     #print("To switch between min_latency/user_specified modes, press TAB key in the output window")
 
-    presenter = monitors.Presenter(args.utilization_monitors, 55, 640, 480)
+    presenter = monitors.Presenter(args.utilization_monitors, 55, 1280, 720)
         #(round(cap.get(cv2.CAP_PROP_FRAME_WIDTH) / 4), round(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) / 8)))
             
     
@@ -488,15 +490,16 @@ def main():
                          min(obj['class_id'] * 5, 255))
                 xavg = int((obj['xmin']+obj['xmax'])/2)
                 yavg = int((obj['ymin']+obj['ymax'])/2)
-                diff = int(((obj['ymax']-obj['ymin'])+(obj['xmax']-obj['xmin']))/16)
+                ydet = int((obj['ymin']*2+obj['ymax']*8)/10)
+                diff = int(((obj['ymax']-obj['ymin'])+(obj['xmax']-obj['xmin']))/20)
                 det_label = labels_map[obj['class_id']] if labels_map and len(labels_map) >= obj['class_id'] else \
                     str(obj['class_id'])
                 if obj['class_id'] == 1:
                     continue
                     #label_one_pixel.append([[obj['xmin'],obj['ymin']],[obj['xmax'],obj['ymax']]])
                 elif obj['class_id'] == 0:
-                    real_depth = depth_frame.get_distance(xavg,yavg)
-                    depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, [xavg, obj['ymax']], real_depth/depth_scale)
+                    real_depth = depth_frame.get_distance(xavg,ydet)
+                    depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, [xavg, ydet], real_depth/depth_scale)
                     label_zero_point.append([depth_point,color_dtm(lab_frame, xavg, yavg, diff, args.color_range)])
                     # 0 = green,1 = red,2 = others
 
@@ -511,12 +514,13 @@ def main():
                             "#" + det_label + ' ' + str(round(obj['confidence'] * 100, 1)) + ' % ',
                             (obj['xmin'], obj['ymin'] - 7), cv2.FONT_HERSHEY_COMPLEX, 0.6, color, 1)
             if any(label_zero_point):
-                detect_target = [x  for x in label_zero_point if not x[1] == 2]
-                maybe_target = [x  for x in label_zero_point if x[1] == 2]
+                #detect_target = [x  for x in label_zero_point if not x[1] == 2]
+                #maybe_target = [x  for x in label_zero_point if x[1] == 2]
                 transformed_label_zero_point = [get_transformed_points(x[0]) for x in label_zero_point]
                 ros_server.LastStorage = [[x[1] for x in label_zero_point],[x.tf_pos for x in transformed_label_zero_point]]
                 rospy.loginfo(ros_server.LastStorage)
             #Five cups colors if well detected in right region
+            """
             if any(label_one_pixel):
                 index_1 = 0
                 index_2 = 0
@@ -547,9 +551,11 @@ def main():
                     else:
                         colors_message.append("no cup")
                 rospy.loginfo(colors_message)
+            """
             #end
-            helpers.put_highlighted_text(frame, "{} mode".format(mode.current.name), (10, int(origin_im_size[0] - 20)),
-                                         cv2.FONT_HERSHEY_COMPLEX, 0.75, (10, 10, 200), 2)
+            #helpers.put_highlighted_text(frame, "{} mode".format(mode.current.name), 
+            #                             (10, int(origin_im_size[0] - 20)),
+            #                             cv2.FONT_HERSHEY_COMPLEX, 0.75, (10, 10, 200), 2)
             
             if is_same_mode and prev_mode_active_request_count == 0:
                 mode_metrics[mode.current].update(start_time, frame)
@@ -560,6 +566,8 @@ def main():
                                              (10, int(origin_im_size[0] - 50)), cv2.FONT_HERSHEY_COMPLEX, 0.75,
                                              (10, 200, 10), 2)
             if not args.no_show:
+                cv2.namedWindow("Detection Results", cv2.WND_PROP_FULLSCREEN)
+                cv2.setWindowProperty("Detection Results", cv2.WND_PROP_FULLSCREEN,  cv2.WINDOW_FULLSCREEN)
                 cv2.imshow("Detection Results", frame)
                 key = cv2.waitKey(wait_key_time)
 
