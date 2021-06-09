@@ -52,7 +52,7 @@ from performance_metrics import PerformanceMetrics
 
 class arguments:
     def __init__(self):
-        self.model = "/home/ubuntu/catkin_ws/src/beacon_cam/src/yolov4/frozen_darknet_yolov4_model.xml"
+        self.model = "/home/ubuntu/catkin_ws/src/beacon_cam/src/yolov4_mnist/frozen_darknet_yolov4_model.xml"
         self.device = "MYRIAD"
         self.labels = ""#"/home/ubuntu/catkin_ws/src/beacon_cam/src/yolov4/labels_map.txt"
         self.prob_threshold = [0.92,0.92]
@@ -65,17 +65,7 @@ class arguments:
         self.no_show = False
         self.utilization_monitors = ''
         self.keep_aspect_ratio = False
-        self.color_file = "/home/ubuntu/catkin_ws/src/beacon_cam/src/cr.txt"
-        self.color_range = {}
-    def load_range(self):
-        try:
-            with open(self.color_file,'r') as cf:
-                for line in cf:
-                    line_split = line.split(" ")
-                    self.color_range[line_split[0]] = [float(line_split[1]), float(line_split[2]), float(line_split[3]), float(line_split[4])]
-        except OSError as e:
-            rospy.loginfo(e)
-            exit(1)
+
 
 class YoloParams:
     # ------------------------------------------- Extracting layer parameters ------------------------------------------
