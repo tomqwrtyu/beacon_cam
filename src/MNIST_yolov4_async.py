@@ -266,9 +266,9 @@ def rs_isOpened(pipeline):
     return 0 if not color_frame else 1
 
 
-def posi_dtm(frame, y, x): #up left for 1,up mid for 2,up right for 3
+def pos_dtm(frame, x, y): #up left for 1,up mid for 2,up right for 3
                            #left for 4,mid for 5,right for 6
-                           #down left for 1,down mid for 2,down right for 3
+                           #down left for 7,down mid for 8,down right for 9
     examine_axes_list = []
     oneThirdOfX = floor(frame.shape[0]/3)
     oneThirdOfY = floor(frame.shape[1]/3)
@@ -279,14 +279,14 @@ def posi_dtm(frame, y, x): #up left for 1,up mid for 2,up right for 3
         examine_x[0] = examine_x[1]
         examine_x[1] += oneThirdOfX
         if x > examine_x[0] and x < examine_x[1] and y > examine_y[0] and y < examine_y[1]:
-            return [(3*i+j),(round(examine_x[0]+examine_x[1]),round(examine_y[0]+examine_y[1]))]
+            return round(examine_x[0]+examine_x[1]),round(examine_y[0]+examine_y[1])
         else:
             continue
         while(j < 3):
             examine_y[0] = examine_y[1]
             examine_y[1] += oneThirdOfY
             if x > examine_x[0] and x < examine_x[1] and y > examine_y[0] and y < examine_y[1]:
-                return [(3*i+j),(round(examine_x[0]+examine_x[1]),round(examine_y[0]+examine_y[1]))]
+                return round(examine_x[0]+examine_x[1]),round(examine_y[0]+examine_y[1])
             else:
                 continue
 
@@ -450,13 +450,14 @@ def main():
                 yavg = int((obj['ymin']+obj['ymax'])/2)
                 det_label = labels_map[obj['class_id']] if labels_map and len(labels_map) >= obj['class_id'] else \
                     str(obj['class_id'])
+                detected_list.append([det_label,pos_dtm(frame,xavg,yavg)])
                 if args.raw_output_message:
                     rospy.loginfo(
                         "{:^9} | {:10f} | {:4} | {:4} | {:4} | {:4} | {} ".format(det_label, obj['confidence'],
                                                                                   obj['xmin'], obj['ymin'], obj['xmax'],
                                                                                   obj['ymax']))
                 
-            imgToShow = np.zeros((512,512,3), np.uint8)
+            imgToShow = np.zeros((frame.shape[1],frame.shape[0],3), np.uint8)
             imgToShow.fill(255)
             imgToShow = write_line(imgToShow,frame)
             
@@ -478,8 +479,8 @@ def main():
                                              (10, int(origin_im_size[0] - 50)), cv2.FONT_HERSHEY_COMPLEX, 0.75,
                                              (10, 200, 10), 2)
             if not args.no_show:
-                cv2.namedWindow("Detection Results", cv2.WND_PROP_FULLSCREEN)
-                cv2.setWindowProperty("Detection Results", cv2.WND_PROP_FULLSCREEN,  cv2.WINDOW_FULLSCREEN)
+                cv2.namedWindow("Detection Results", cv2.WINDOW_NORMAL)#cv2.WND_PROP_FULLSCREEN)
+                #cv2.setWindowProperty("Detection Results", cv2.WND_PROP_FULLSCREEN,  cv2.WINDOW_FULLSCREEN)
                 cv2.imshow("Detection Results", imgToShow)
                 key = cv2.waitKey(wait_key_time)
 
