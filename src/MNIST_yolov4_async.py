@@ -279,16 +279,16 @@ def posi_dtm(frame, y, x): #up left for 1,up mid for 2,up right for 3
         examine_x[0] = examine_x[1]
         examine_x[1] += oneThirdOfX
         if x > examine_x[0] and x < examine_x[1] and y > examine_y[0] and y < examine_y[1]:
-                return [(3*i+j),(round(examine_x[0]+examine_x[1),round(examine_y[0]+examine_y[1))]
-            else:
-                 continue
+            return [(3*i+j),(round(examine_x[0]+examine_x[1]),round(examine_y[0]+examine_y[1]))]
+        else:
+            continue
         while(j < 3):
             examine_y[0] = examine_y[1]
             examine_y[1] += oneThirdOfY
             if x > examine_x[0] and x < examine_x[1] and y > examine_y[0] and y < examine_y[1]:
-                return [(3*i+j),(round(examine_x[0]+examine_x[1),round(examine_y[0]+examine_y[1))]
+                return [(3*i+j),(round(examine_x[0]+examine_x[1]),round(examine_y[0]+examine_y[1]))]
             else:
-                 continue
+                continue
 
             
 def write_line(img,frame):
@@ -450,8 +450,6 @@ def main():
                 yavg = int((obj['ymin']+obj['ymax'])/2)
                 det_label = labels_map[obj['class_id']] if labels_map and len(labels_map) >= obj['class_id'] else \
                     str(obj['class_id'])
-                if obj['class_id'] == 1:
-                    
                 if args.raw_output_message:
                     rospy.loginfo(
                         "{:^9} | {:10f} | {:4} | {:4} | {:4} | {:4} | {} ".format(det_label, obj['confidence'],
@@ -464,9 +462,9 @@ def main():
             
             if any(detected_list):
                 for detected_number in detected_list:
-                    color = (detected_number[0] * 12.5, 255),
-                             detected_number[0] * 7, 255),
-                             detected_number[0] * 5, 255))
+                    color = (min(detected_number[0] * 12.5, 255),
+                             min(detected_number[0] * 7, 255),
+                             min(detected_number[0] * 5, 255))
                     cv2.putText(imgToShow,
                             str(detected_number[0]),
                             detected_number[1], cv2.FONT_HERSHEY_DUPLEX, 1, color, 1)
