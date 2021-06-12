@@ -55,7 +55,7 @@ class arguments:
         self.model = "/home/ubuntu/catkin_ws/src/beacon_cam/src/yolov4_mnist/frozen_darknet_yolov4_model.xml"
         self.device = "MYRIAD"
         self.labels = ""#"/home/ubuntu/catkin_ws/src/beacon_cam/src/yolov4/labels_map.txt"
-        self.prob_threshold = [0.6,0.6,0.8,0.8,0.8,0.8,0.8,0.8,0.8,0.8]
+        self.prob_threshold = [0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.7]
         self.iou_threshold = 0.4
         self.nireq = 1
         self.raw_output_message = False
@@ -468,7 +468,7 @@ def main():
                              min(int(detected_number[0]) * 14, 255),
                              min(int(detected_number[0]) * 10, 255))
                     cv2.putText(imgToShow,
-                                str(detected_number[0]),
+                                'here',#str(detected_number[0]),
                                 (detected_number[1][1],detected_number[1][0]), cv2.FONT_HERSHEY_DUPLEX, 2, color, 2)
                             
             if is_same_mode and prev_mode_active_request_count == 0:
