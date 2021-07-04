@@ -314,7 +314,7 @@ class beacon_cam_server():
         self.LastStorage = []
         self.pos3d_pub = None
         self.FRAME_ID = 'base_Camera'
-        self.LIFETIME = 1
+        self.LifeTime = 1
         
     def start(self):
         rospy.init_node('beacon_camera')
@@ -330,7 +330,7 @@ class beacon_cam_server():
             
             marker.id = i 
             marker.action = Marker.ADD
-            marker.lifetime = rospy.Duration(self.LIFETIME)
+            marker.lifetime = rospy.Duration(self.LifeTime)
             marker.type = Marker.CYLINDER
             
             marker.color.a = 1.0
@@ -597,9 +597,9 @@ def main():
             #                             cv2.FONT_HERSHEY_COMPLEX, 0.75, (10, 10, 200), 2)
             
             if is_same_mode and prev_mode_active_request_count == 0:
-                ros_server.LIFETIME = mode_metrics[mode.current].update(start_time, frame)
+                ros_server.LifeTime = mode_metrics[mode.current].update(start_time, frame)
             else:
-                ros_server.LIFETIME = mode_metrics[mode.get_other()].update(start_time, frame)
+                ros_server.LifeTime = mode_metrics[mode.get_other()].update(start_time, frame)
                 prev_mode_active_request_count -= 1
                 helpers.put_highlighted_text(frame, "Switching modes, please wait...",
                                              (10, int(origin_im_size[0] - 50)), cv2.FONT_HERSHEY_COMPLEX, 0.75,
