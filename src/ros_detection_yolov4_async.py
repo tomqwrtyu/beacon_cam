@@ -597,9 +597,9 @@ def main():
             #                             cv2.FONT_HERSHEY_COMPLEX, 0.75, (10, 10, 200), 2)
             
             if is_same_mode and prev_mode_active_request_count == 0:
-                mode_metrics[mode.current].update(start_time, frame)
+                ros_server.LIFETIME = mode_metrics[mode.current].update(start_time, frame)
             else:
-                mode_metrics[mode.get_other()].update(start_time, frame)
+                ros_server.LIFETIME = mode_metrics[mode.get_other()].update(start_time, frame)
                 prev_mode_active_request_count -= 1
                 helpers.put_highlighted_text(frame, "Switching modes, please wait...",
                                              (10, int(origin_im_size[0] - 50)), cv2.FONT_HERSHEY_COMPLEX, 0.75,

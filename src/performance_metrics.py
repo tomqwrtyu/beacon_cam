@@ -67,6 +67,7 @@ class PerformanceMetrics:
         if current_fps is not None:
             put_highlighted_text(frame, "FPS: {:.1f}".format(current_fps),
                                  (position[0], position[1]+30), cv2.FONT_HERSHEY_COMPLEX, font_scale, color, thickness)
+            return current_fps
 
     def get_last(self):
         return (self.last_moving_statistic.latency / self.last_moving_statistic.frame_count
