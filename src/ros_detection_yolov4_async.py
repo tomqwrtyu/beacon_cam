@@ -28,7 +28,6 @@ from time import perf_counter
 from enum import Enum
 
 import cv2
-import rospy
 import pyrealsense2.pyrealsense2 as rs
 import numpy as np
 from openvino.inference_engine import IECore
@@ -36,6 +35,7 @@ from openvino.inference_engine import IECore
 import rospy
 from std_msgs.msg import String
 from std_msgs.msg import Float32MultiArray
+from visualization_msgs.msg import Marker,MarkerArray
 from beacon_cam.srv import *
 
 #import keyboard 
@@ -312,7 +312,44 @@ def color_dtm(lab_frame, y, x, diff, color_range): #if green then return 0,red t
 class beacon_cam_server():
     def __init__(self):
         self.LastStorage = []
+        self.pos3d_pub = None
+        self.FRAME_ID = 'base_Camera'
+        self.LIFETIME = 1
         
+    def start(self):
+        rospy.init_node('beacon_camera')
+        self.pos3d_pub = rospy.Publisher('cup_3d', marker_array,queue_size = 10)
+        service = rospy.Service('cup_camera', cup_camera, self._request_handler)
+        
+    def publish_pos3d(self):
+        marker_array = MarkerArray()
+        for i, pos3d in  enumerate(self.LastStorage[1]):
+            marker = Marker()
+            marker.header.frame_id = self.FRAME_ID
+            marker.header.stamp = rospy.Time.now()
+            
+            marker.id = i 
+            marker.action = Marker.ADD
+            marker.lifetime = rospy.Duration(self.LIFETIME)
+            marker.type = Marker.CYLINDER
+            
+            marker.color.a = 1.0
+            marker.color.r = 0.0
+            marker.color.g = 0.0
+            marker.color.b = 0.0
+            if self.LastStorage[0][i] == '0':
+                marker.color.g = 1.0
+            elif self.LastStorage[0][i] == '1':
+                marker.color.r = 1.0
+                
+            marker.scale.x = 7.0
+            marker.scale.y = 7.0
+            marker.scale.z = 12.0
+            
+            marker.points = pos3d
+            marker_array.markers.append(marker)
+            
+    
     def _request_handler(self,request):
         response = cup_cameraResponse()
         if request.req:
@@ -322,9 +359,6 @@ class beacon_cam_server():
             return response
         else:
             return response
-    def start(self):
-        rospy.init_node('beacon_camera')
-        service = rospy.Service('cup_camera', cup_camera, self._request_handler)
 
 def get_transformed_points(points):
     rospy.wait_for_service('point_transform')
@@ -334,6 +368,8 @@ def get_transformed_points(points):
         return res
     except rospy.ServiceException:
          rospy.loginfo('Service call failed.')
+         
+
         
 
 def main():
