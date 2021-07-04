@@ -55,7 +55,7 @@ class arguments:
         self.model = "/home/ubuntu/catkin_ws/src/beacon_cam/src/yolov4/frozen_darknet_yolov4_model.xml"
         self.device = "MYRIAD"
         self.labels = ""#"/home/ubuntu/catkin_ws/src/beacon_cam/src/yolov4/labels_map.txt"
-        self.prob_threshold = [0.92,0.92]#[0.5,0.5,0.6,0.6,0.6,0.6,0.6,0.6,0.6,0.6]
+        self.prob_threshold = [0.92,0.92]
         self.iou_threshold = 0.4
         self.nireq = 1
         self.raw_output_message = False
@@ -446,10 +446,10 @@ def main():
     
     pipeline = rs.pipeline()
     config = rs.config()
-    #config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 6)
-    #config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 10)
-    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 15)
-    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+    config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 6)
+    config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 10)
+    #config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 15)
+    #config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 30)
     profile = pipeline.start(config)
     depth_sensor = profile.get_device().first_depth_sensor()
     #depth_sensor.set_option(rs.option.enable_auto_exposure, False)
@@ -551,6 +551,8 @@ def main():
                             "#" + det_label + ' ' + str(round(obj['confidence'] * 100, 1)) + ' % ',
                             (obj['xmin'], obj['ymin'] - 7), cv2.FONT_HERSHEY_COMPLEX, 0.6, color, 1)
             if any(label_zero_point):
+                #detect_target = [x  for x in label_zero_point if not x[1] == 2]
+                #maybe_target = [x  for x in label_zero_point if x[1] == 2]
                 transformed_label_zero_point = [get_transformed_points(x[0]) for x in label_zero_point]
                 ros_server.LastStorage = [[x[1] for x in label_zero_point],[x.tf_pos for x in transformed_label_zero_point]]
                 rospy.loginfo(ros_server.LastStorage)
