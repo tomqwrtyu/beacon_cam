@@ -348,6 +348,7 @@ class beacon_cam_server():
             
             marker.points = pos3d
             marker_array.markers.append(marker)
+        self.pos3d_pub.publish(marker_array)
             
     
     def _request_handler(self,request):
@@ -555,6 +556,7 @@ def main():
                 #maybe_target = [x  for x in label_zero_point if x[1] == 2]
                 transformed_label_zero_point = [get_transformed_points(x[0]) for x in label_zero_point]
                 ros_server.LastStorage = [[x[1] for x in label_zero_point],[x.tf_pos for x in transformed_label_zero_point]]
+                ros_server.pos3d_pub()
                 rospy.loginfo(ros_server.LastStorage)
             #Five cups colors if well detected in right region
             """
