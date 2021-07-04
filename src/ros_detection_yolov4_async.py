@@ -62,7 +62,7 @@ class arguments:
         self.num_infer_requests = 1
         self.num_streams = ""
         self.number_threads = None
-        self.no_show = False
+        self.no_show = True
         self.utilization_monitors = ''
         self.keep_aspect_ratio = False
         self.color_file = "/home/ubuntu/catkin_ws/src/beacon_cam/src/cr.txt"
@@ -313,12 +313,12 @@ class beacon_cam_server():
     def __init__(self):
         self.LastStorage = []
         self.pos3d_pub = None
-        self.FRAME_ID = 'base_Camera'
+        self.FRAME_ID = 'base_link'
         self.LifeTime = 1
         
     def start(self):
         rospy.init_node('beacon_camera')
-        self.pos3d_pub = rospy.Publisher('cup_3d', marker_array,queue_size = 10)
+        self.pos3d_pub = rospy.Publisher('cup_3d', MarkerArray,queue_size = 10)
         service = rospy.Service('cup_camera', cup_camera, self._request_handler)
         
     def publish_pos3d(self):
@@ -337,16 +337,22 @@ class beacon_cam_server():
             marker.color.r = 0.0
             marker.color.g = 0.0
             marker.color.b = 0.0
-            if self.LastStorage[0][i] == '0':
+            if self.LastStorage[0][i] == 0:
                 marker.color.g = 1.0
-            elif self.LastStorage[0][i] == '1':
+            elif self.LastStorage[0][i] == 1:
                 marker.color.r = 1.0
                 
-            marker.scale.x = 7.0
-            marker.scale.y = 7.0
-            marker.scale.z = 12.0
+            marker.scale.x = 71.0 / 1000
+            marker.scale.y = 71.0 / 1000
+            marker.scale.z = 114.0 / 1000
             
-            marker.points = pos3d
+            marker.pose.position.x = (pos3d[0]) / 1000
+            marker.pose.position.y = (pos3d[1]) / 1000
+            marker.pose.position.z = (pos3d[2]-35) / 1000
+            marker.pose.orientation.x = 0
+            marker.pose.orientation.y = 0
+            marker.pose.orientation.z = 0
+            marker.pose.orientation.w = 1
             marker_array.markers.append(marker)
         self.pos3d_pub.publish(marker_array)
             
@@ -376,7 +382,6 @@ def get_transformed_points(points):
 def main():
     #args = build_argparser().parse_args()
     args = arguments()
-    args.no_show = False
     if not os.path.isfile(args.color_file):
         lab.getData()
     args.load_range()
@@ -447,10 +452,10 @@ def main():
     
     pipeline = rs.pipeline()
     config = rs.config()
-    config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 6)
-    config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 10)
-    #config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 15)
-    #config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 30)
+    #config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 6)
+    #config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 10)
+    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
     profile = pipeline.start(config)
     depth_sensor = profile.get_device().first_depth_sensor()
     #depth_sensor.set_option(rs.option.enable_auto_exposure, False)
@@ -556,7 +561,7 @@ def main():
                 #maybe_target = [x  for x in label_zero_point if x[1] == 2]
                 transformed_label_zero_point = [get_transformed_points(x[0]) for x in label_zero_point]
                 ros_server.LastStorage = [[x[1] for x in label_zero_point],[x.tf_pos for x in transformed_label_zero_point]]
-                ros_server.pos3d_pub()
+                ros_server.publish_pos3d()
                 rospy.loginfo(ros_server.LastStorage)
             #Five cups colors if well detected in right region
             """
