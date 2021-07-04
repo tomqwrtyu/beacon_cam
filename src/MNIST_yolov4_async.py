@@ -55,7 +55,7 @@ class arguments:
         self.model = "/home/ubuntu/catkin_ws/src/beacon_cam/src/yolov4_mnist/frozen_darknet_yolov4_model.xml"
         self.device = "MYRIAD"
         self.labels = ""#"/home/ubuntu/catkin_ws/src/beacon_cam/src/yolov4/labels_map.txt"
-        self.prob_threshold = [0.92,0.92]
+        self.prob_threshold = [0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.7]
         self.iou_threshold = 0.4
         self.nireq = 1
         self.raw_output_message = False
@@ -266,44 +266,43 @@ def rs_isOpened(pipeline):
     return 0 if not color_frame else 1
 
 
-def pos_dtm(frame, x, y): #up left for 1,up mid for 2,up right for 3
+def pos_dtm(shape, x, y): #up left for 1,up mid for 2,up right for 3
                            #left for 4,mid for 5,right for 6
                            #down left for 7,down mid for 8,down right for 9
     examine_axes_list = []
-    oneThirdOfX = floor(frame.shape[0]/3)
-    oneThirdOfY = floor(frame.shape[1]/3)
+    oneThirdOfX = floor(shape[0]/3)
+    oneThirdOfY = floor(shape[1]/3)
     examine_x = [0,0]
     examine_y = [0,0]
     for i in range(3):
         j = 0
         examine_x[0] = examine_x[1]
         examine_x[1] += oneThirdOfX
-        if x > examine_x[0] and x < examine_x[1] and y > examine_y[0] and y < examine_y[1]:
-            return round(examine_x[0]+examine_x[1]),round(examine_y[0]+examine_y[1])
-        else:
-            continue
+        examine_y = [0,0]
         while(j < 3):
+            j += 1
             examine_y[0] = examine_y[1]
             examine_y[1] += oneThirdOfY
-            if x > examine_x[0] and x < examine_x[1] and y > examine_y[0] and y < examine_y[1]:
-                return round(examine_x[0]+examine_x[1]),round(examine_y[0]+examine_y[1])
+            if x >= examine_x[0] and x <= examine_x[1] and y >= examine_y[0] and y <= examine_y[1]:
+                return (int((examine_x[0]+examine_x[1])/2),int((examine_y[0]+examine_y[1])/2))
             else:
                 continue
+    return (0,0)
 
             
-def write_line(img,frame):
-    oneThirdOfX = floor(frame.shape[0]/3)
-    oneThirdOfY = floor(frame.shape[1]/3)
-    xmax = frame.shape[0]
-    ymax = frame.shape[1]
+def write_line(img,shape):
+    oneThirdOfX = floor(shape[0]/3)
+    oneThirdOfY = floor(shape[1]/3)
+    xmax = shape[0]
+    ymax = shape[1]
     x = 0
     y = 0
     for i in range(3):
         x += oneThirdOfX
-        cv2.line(img, (x,0), (x,ymax), (0,0,0), 3)
+        cv2.line(img, (0,x), (ymax,x), (0,0,0), 3)
     for j in range(3):
         y += oneThirdOfY
-        cv2.line(img, (0,y), (xmax,y), (0,0,0), 3)
+        cv2.line(img, (y,0), (y,xmax), (0,0,0), 3)
     return img
             
 
@@ -311,6 +310,8 @@ def main():
     #args = build_argparser().parse_args()
     args = arguments()
     args.no_show = False
+    
+    node = rospy.init_node('hello_my_friend')
 
     # ------------- 1. Plugin initialization for specified device and load extensions library if specified -------------
     rospy.loginfo("Creating Inference Engine...")
@@ -450,25 +451,25 @@ def main():
                 yavg = int((obj['ymin']+obj['ymax'])/2)
                 det_label = labels_map[obj['class_id']] if labels_map and len(labels_map) >= obj['class_id'] else \
                     str(obj['class_id'])
-                detected_list.append([det_label,pos_dtm(frame,xavg,yavg)])
+                detected_list.append([det_label,pos_dtm(frame.shape,yavg,xavg)])
                 if args.raw_output_message:
                     rospy.loginfo(
                         "{:^9} | {:10f} | {:4} | {:4} | {:4} | {:4} | {} ".format(det_label, obj['confidence'],
                                                                                   obj['xmin'], obj['ymin'], obj['xmax'],
                                                                                   obj['ymax']))
                 
-            imgToShow = np.zeros((frame.shape[1],frame.shape[0],3), np.uint8)
+            imgToShow = np.zeros((frame.shape[0],frame.shape[1],3), np.uint8)
             imgToShow.fill(255)
-            imgToShow = write_line(imgToShow,frame)
+            imgToShow = write_line(imgToShow,frame.shape)
             
             if any(detected_list):
                 for detected_number in detected_list:
-                    color = (min(detected_number[0] * 12.5, 255),
-                             min(detected_number[0] * 7, 255),
-                             min(detected_number[0] * 5, 255))
+                    color = (min(int(detected_number[0]) * 25, 255),
+                             min(int(detected_number[0]) * 14, 255),
+                             min(int(detected_number[0]) * 10, 255))
                     cv2.putText(imgToShow,
-                            str(detected_number[0]),
-                            detected_number[1], cv2.FONT_HERSHEY_DUPLEX, 1, color, 1)
+                                'here',#str(detected_number[0]),
+                                (detected_number[1][1],detected_number[1][0]), cv2.FONT_HERSHEY_DUPLEX, 2, color, 2)
                             
             if is_same_mode and prev_mode_active_request_count == 0:
                 mode_metrics[mode.current].update(start_time, frame)
