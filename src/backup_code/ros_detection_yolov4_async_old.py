@@ -20,7 +20,6 @@
 import threading
 import os
 import sys
-import subprocess #shell command
 from collections import deque
 from argparse import ArgumentParser, SUPPRESS
 from math import exp as exp
@@ -28,15 +27,15 @@ from time import perf_counter
 from enum import Enum
 
 import cv2
+import rospy
 import pyrealsense2.pyrealsense2 as rs
 import numpy as np
 from openvino.inference_engine import IECore
 
 import rospy
 from std_msgs.msg import String
-from std_msgs.msg import Float32MultiArray
-from visualization_msgs.msg import Marker,MarkerArray
-from beacon_cam.srv import *
+
+#import keyboard 
 
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'common'))
 import helpers
@@ -44,25 +43,27 @@ import monitors
 import lab
 from performance_metrics import PerformanceMetrics
 
+
+#logging.basicConfig(format="[ %(levelname)s ] %(message)s", level=logging.INFO, stream=sys.stdout)
+#log = logging.getLogger()
+
 class arguments:
-    def __init__(self)
-        self.FILE_ABSPATH = os.path.dirname(os.path.abspath(__file__))
-        self.model = self.FILE_ABSPATH + "/yolov4/frozen_darknet_yolov4_model.xml"
-        self.device = "MYRIAD" #This .py is only for MYRIAD
-        self.labels = ""
-        self.prob_threshold = [0.92,0.92]
+    def __init__(self):
+        self.model = "/home/ubuntu/catkin_ws/src/beacon_cam/src/yolov4/frozen_darknet_yolov4_model.xml"
+        self.device = "MYRIAD"
+        self.labels = ""#"/home/ubuntu/catkin_ws/src/beacon_cam/src/yolov4/labels_map.txt"
+        self.prob_threshold = [0.9,0.8]
         self.iou_threshold = 0.4
         self.nireq = 1
         self.raw_output_message = False
         self.num_infer_requests = 1
         self.num_streams = ""
         self.number_threads = None
-        self.no_show = True
+        self.no_show = False
         self.utilization_monitors = ''
         self.keep_aspect_ratio = False
-        self.color_file = self.FILE_ABSPATH + "/cr.txt"
+        self.color_file = "/home/ubuntu/catkin_ws/src/beacon_cam/src/cr.txt"
         self.color_range = {}
-        self.resolution = '720p'
     def load_range(self):
         try:
             with open(self.color_file,'r') as cf:
@@ -264,120 +265,18 @@ def await_requests_completion(requests):
     for request in requests:
         request.wait() 
 
-
-def color_dtm(lab_frame, y, x, diff, color_range): #if green then return 0,red then return 1,else then 2
-    examine_axes_list = []
-    x = x - diff
-    y = y - diff
-    green = color_range['green']
-    red = color_range['red']
-    green_count = 0
-    red_count = 0
-    for i in range(3):
-        for j in range(3):
-            if i == 0 or i == 2:
-                if j == 1:
-                    examine_axes_list.append([x+diff*i,y+diff*j])
-            else:
-                 examine_axes_list.append([x+diff*i,y+diff*j])
-    for axis in examine_axes_list:
-        a = lab_frame[x, y, 1]
-        b = lab_frame[x, y, 2]
-    
-        if (a < green[0]+green[1] and a > green[0]-green[1]) \
-             and ((b < green[2]+green[3] and b > green[2]-green[3])):
-            green_count += 1
-        elif (a < red[0]+red[1] and a > red[0]-red[1]) \
-             and ((b < red[2]+red[3] and b > red[2]-red[3])):
-            red_count += 1
-    if green_count >= 5:
-        return 0
-    elif red_count >= 5:
-        return 1
-    else:
-        return 2
-
-class beacon_cam_server():
-    def __init__(self):
-        self.LastStorage = []
-        self.pos3d_pub = None
-        self.FRAME_ID = 'base_link'
-        self.LifeTime = 1
-        
-    def start(self):
-        rospy.init_node('beacon_camera')
-        self.pos3d_pub = rospy.Publisher('cup_3d', MarkerArray,queue_size = 10)
-        service = rospy.Service('cup_camera', cup_camera, self._request_handler)
-        
-    def publish_pos3d(self): #For Rviz visualized simulation
-        marker_array = MarkerArray()
-        for i, pos3d in  enumerate(self.LastStorage[1]):
-            marker = Marker()
-            marker.header.frame_id = self.FRAME_ID
-            marker.header.stamp = rospy.Time.now()
-            
-            marker.id = i 
-            marker.action = Marker.ADD
-            marker.lifetime = rospy.Duration(self.LifeTime)
-            marker.type = Marker.CYLINDER
-            
-            marker.color.a = 1.0
-            marker.color.r = 0.0
-            marker.color.g = 0.0
-            marker.color.b = 0.0
-            if self.LastStorage[0][i] == 0:
-                marker.color.g = 1.0
-            elif self.LastStorage[0][i] == 1:
-                marker.color.r = 1.0
-                
-            marker.scale.x = 71.0 / 1000
-            marker.scale.y = 71.0 / 1000
-            marker.scale.z = 114.0 / 1000
-            
-            marker.pose.position.x = (pos3d[0]) / 1000
-            marker.pose.position.y = (pos3d[1]) / 1000
-            marker.pose.position.z = (pos3d[2]-35) / 1000
-            marker.pose.orientation.x = 0
-            marker.pose.orientation.y = 0
-            marker.pose.orientation.z = 0
-            marker.pose.orientation.w = 1
-            marker_array.markers.append(marker)
-        self.pos3d_pub.publish(marker_array)
-            
-    
-    def _request_handler(self,request):#Service for transform point from camera axis to world axis
-        response = cup_cameraResponse()
-        if request.req:
-            response.color = self.LastStorage[0]
-            flat_list = [item for sublist in self.LastStorage[1] for item in sublist]
-            response.cup_pos = flat_list
-            return response
-        else:
-            return response
-
-def get_transformed_points(points):
-    rospy.wait_for_service('point_transform')
-    try:
-        transform = rospy.ServiceProxy('point_transform', point_transform)
-        res = transform(points)
-        return res
-    except rospy.ServiceException:
-         rospy.loginfo('Service call failed.')
-         
-
-        
-
 def main():
-    #Some setting
+    #args = build_argparser().parse_args()
     args = arguments()
+    args.no_show = False
     if not os.path.isfile(args.color_file):
         lab.getData()
-    args.load_range() 
+    args.load_range()
     
-    #server
-    ros_server = beacon_cam_server()
-    ros_server.start()
-
+    #ros publisher
+    pub = rospy.Publisher('beacon_camera', String, queue_size=10)
+    rospy.init_node('beacon_camera', anonymous=True)
+    
 
     # ------------- 1. Plugin initialization for specified device and load extensions library if specified -------------
     rospy.loginfo("Creating Inference Engine...")
@@ -391,6 +290,26 @@ def main():
         devices_nstreams = {device: args.num_streams for device in ['CPU', 'GPU'] if device in args.device} \
                            if args.num_streams.isdigit() \
                            else dict([device.split(':') for device in args.num_streams.split(',')])
+
+    if 'CPU' in args.device:
+        if args.cpu_extension:
+            ie.add_extension(args.cpu_extension, 'CPU')
+        if args.number_threads is not None:
+            config_user_specified['CPU_THREADS_NUM'] = str(args.number_threads)
+        if 'CPU' in devices_nstreams:
+            config_user_specified['CPU_THROUGHPUT_STREAMS'] = devices_nstreams['CPU'] \
+                                                              if int(devices_nstreams['CPU']) > 0 \
+                                                              else 'CPU_THROUGHPUT_AUTO'
+
+        config_min_latency['CPU_THROUGHPUT_STREAMS'] = '1'
+
+    if 'GPU' in args.device:
+        if 'GPU' in devices_nstreams:
+            config_user_specified['GPU_THROUGHPUT_STREAMS'] = devices_nstreams['GPU'] \
+                                                              if int(devices_nstreams['GPU']) > 0 \
+                                                              else 'GPU_THROUGHPUT_AUTO'
+
+        config_min_latency['GPU_THROUGHPUT_STREAMS'] = '1'
 
     # -------------------- 2. Reading the IR generated by the Model Optimizer (.xml and .bin files) --------------------
     rospy.loginfo("Loading network")
@@ -418,21 +337,13 @@ def main():
     
     mode = Mode(Modes.USER_SPECIFIED)
     
-    #Setup Realsense
     pipeline = rs.pipeline()
     config = rs.config()
-    if args.resolution == '720p':
-        config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 6)
-        config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 10)
-    else if args.resolution == '480p':
-        config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-        config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-    profile = pipeline.start(config)
-    depth_sensor = profile.get_device().first_depth_sensor()
-    if depth_sensor.supports(rs.option.depth_units):
-        depth_sensor.set_option(rs.option.depth_units,0.001)
-    depth_scale = depth_sensor.get_depth_scale()
-    align = rs.align(rs.stream.color)
+    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+    pipeline.start(config)
+    align_to = rs.stream.color
+    align = rs.align(align_to)
 
     wait_key_time = 1
 
@@ -458,10 +369,34 @@ def main():
 
     # ----------------------------------------------- 5. Doing inference -----------------------------------------------
     rospy.loginfo("Starting inference...")
+    #print("To close the application, press 'CTRL+C' here or switch to the output window and press ESC key")
+    #print("To switch between min_latency/user_specified modes, press TAB key in the output window")
 
-    presenter = monitors.Presenter(args.utilization_monitors, 55, 1280, 720)
+    presenter = monitors.Presenter(args.utilization_monitors, 55, 640, 480)
+        #(round(cap.get(cv2.CAP_PROP_FRAME_WIDTH) / 4), round(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) / 8)))
+        
+    def rs_isOpened(pipeline):
+        frames = pipeline.wait_for_frames()
+        color_frame = frames.get_color_frame()
+        #depth_frame = frames.get_depth_frame()
+        return 0 if not color_frame else 1
+    def color_dtm(lab_frame, y, x, color_range): #if green then return 0,red then return 1,else then 2
+        a = lab_frame[x, y, 1]
+        b = lab_frame[x, y, 2]
+        green = color_range['green']
+        red = color_range['red']
+        if (a < green[0]+green[1] and a > green[0]-green[1]) \
+             and ((b < green[2]+green[3] and b > green[2]-green[3])):
+            return 0
+        elif (a < red[0]+red[1] and a > red[0]-red[1]) \
+             and ((b < red[2]+red[3] and b > red[2]-red[3])):
+            return 1
+        else:
+            return 2
+            
     
-    while (completed_request_results \
+    while (rs_isOpened(pipeline) \
+           or completed_request_results \
            or len(empty_requests) < len(exec_nets[mode.current].requests)) \
           and not callback_exceptions and not rospy.is_shutdown():
         if next_frame_id_to_show in completed_request_results:
@@ -479,11 +414,8 @@ def main():
 
             origin_im_size = frame.shape[:-1]
             presenter.drawGraphs(frame)
-            
-            depth_intrin = depth_frame.profile.as_video_stream_profile().intrinsics
-            
-            label_zero_point = []
-            label_one_pixel = []
+            label_zero_axis = []
+            label_one_axis = []
             for obj in objects:
                 # Validation bbox of detected object
                 obj['xmax'] = min(obj['xmax'], origin_im_size[1])
@@ -494,17 +426,13 @@ def main():
                          min(obj['class_id'] * 7, 255),
                          min(obj['class_id'] * 5, 255))
                 xavg = int((obj['xmin']+obj['xmax'])/2)
-                yavg = int((obj['ymin']+obj['ymax'])/2)
-                ydet = int((obj['ymin']*2+obj['ymax']*8)/10)
-                diff = int(((obj['ymax']-obj['ymin'])+(obj['xmax']-obj['xmin']))/20)
+                yavg = int((obj['ymin']+obj['ymax']*7)/8)
                 det_label = labels_map[obj['class_id']] if labels_map and len(labels_map) >= obj['class_id'] else \
                     str(obj['class_id'])
-                if obj['class_id'] == 1: # 0 = green,1 = red,2 = others
-                    continue
+                if obj['class_id'] == 1:
+                    label_one_axis.append([[obj['xmin'],obj['ymin']],[obj['xmax'],obj['ymax']]])
                 elif obj['class_id'] == 0:
-                    real_depth = depth_frame.get_distance(xavg,ydet)
-                    depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, [xavg, ydet], real_depth/depth_scale)
-                    label_zero_point.append([depth_point,color_dtm(lab_frame, xavg, yavg, diff, args.color_range)])
+                    label_zero_axis.append([[xavg, yavg],color_dtm(lab_frame, xavg, yavg, args.color_range)])
                     
 
                 if args.raw_output_message:
@@ -513,33 +441,58 @@ def main():
                                                                                   obj['xmin'], obj['ymin'], obj['xmax'],
                                                                                   obj['ymax'],
                                                                                   color))
+                #text_publish = det_label.split(" ")[0]
+                #rospy.loginfo(text_publish)
+                #pub.publish(text_publish)
                 cv2.rectangle(frame, (obj['xmin'], obj['ymin']), (obj['xmax'], obj['ymax']), color, 2)
                 cv2.putText(frame,
-                            "#" + det_label + ' ' + str(round(obj['confidence'] * 100, 1)) + ' % ',
+                            "#" + det_label + ' ' + str(round(obj['confidence'] * 100, 1)) + ' % ',#+text_depth,
                             (obj['xmin'], obj['ymin'] - 7), cv2.FONT_HERSHEY_COMPLEX, 0.6, color, 1)
-            if any(label_zero_point):
-                transformed_label_zero_point = [get_transformed_points(x[0]) for x in label_zero_point]
-                ros_server.LastStorage = [[x[1] for x in label_zero_point],[x.tf_pos for x in transformed_label_zero_point]]
-                ros_server.publish_pos3d()
-                #rospy.loginfo(ros_server.LastStorage)
+            rospy.loginfo(label_zero_axis)
+            #Five cups colors if well detected in right region
+            if any(label_one_axis):
+                index_1 = 0
+                index_2 = 0
+                for i in range(len(label_one_axis)):
+                    if label_one_axis[i][0][0] < label_one_axis[index_1][0][0]:
+                        index_1 = i
+                    if label_one_axis[i][1][0] > label_one_axis[index_2][1][0]:
+                        index_2 = i
+                lenth_to_detect = int(round(label_one_axis[index_2][1][1] - label_one_axis[index_1][0][1]))
+                mid_x_point = int((label_one_axis[index_1][0][0]+label_one_axis[index_2][1][0])/2)
+                start = label_one_axis[index_1][0][1]
+                colors = [-1,-1,-1,-1,-1] # 0 for green 1 for red -1 for no cup
+                for i in range(5):
+                    target_color = [0,0,0]
+                    for j in range(lenth_to_detect):
+                        target_color[color_dtm(lab_frame, mid_x_point, j, args.color_range)] += 1
+                    if target_color[0] > int(lenth_to_detect/2):
+                        colors[i] = 0
+                    elif target_color[1] > int(lenth_to_detect/2):
+                        colors[i] = 1
+                    start  = start + lenth_to_detect
+                colors_message = []
+                for i in colors:
+                    if i == 0:
+                        colors_message.append("green")
+                    elif i == 1:
+                        colors_message.append("red")
+                    else:
+                        colors_message.append("no cup")
+                rospy.loginfo(colors_message)
+            #end
+            helpers.put_highlighted_text(frame, "{} mode".format(mode.current.name), (10, int(origin_im_size[0] - 20)),
+                                         cv2.FONT_HERSHEY_COMPLEX, 0.75, (10, 10, 200), 2)
             
             if is_same_mode and prev_mode_active_request_count == 0:
-                try:
-                    ros_server.LifeTime = 1 / mode_metrics[mode.current].update(start_time, frame)
-                except:
-                    ros_server.LifeTime = 1
+                mode_metrics[mode.current].update(start_time, frame)
             else:
-                try:
-                    ros_server.LifeTime = 1 / mode_metrics[mode.current].update(start_time, frame)
-                except:
-                    ros_server.LifeTime = 1
+                mode_metrics[mode.get_other()].update(start_time, frame)
                 prev_mode_active_request_count -= 1
                 helpers.put_highlighted_text(frame, "Switching modes, please wait...",
                                              (10, int(origin_im_size[0] - 50)), cv2.FONT_HERSHEY_COMPLEX, 0.75,
                                              (10, 200, 10), 2)
             if not args.no_show:
-                cv2.namedWindow("Detection Results", cv2.WND_PROP_FULLSCREEN)
-                cv2.setWindowProperty("Detection Results", cv2.WND_PROP_FULLSCREEN,  cv2.WINDOW_FULLSCREEN)
                 cv2.imshow("Detection Results", frame)
                 key = cv2.waitKey(wait_key_time)
 
@@ -604,7 +557,6 @@ def main():
         await_requests_completion(exec_net.requests)
         
     pipeline.stop()
-    subprocess.call(["killall", "roslaunch"])
 
 
 if __name__ == '__main__':
