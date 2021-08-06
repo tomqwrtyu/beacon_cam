@@ -45,7 +45,7 @@ import lab
 from performance_metrics import PerformanceMetrics
 
 class arguments:
-    def __init__(self)
+    def __init__(self):
         self.FILE_ABSPATH = os.path.dirname(os.path.abspath(__file__))
         self.model = self.FILE_ABSPATH + "/yolov4/frozen_darknet_yolov4_model.xml"
         self.device = "MYRIAD" #This .py is only for MYRIAD
@@ -57,9 +57,9 @@ class arguments:
         self.num_infer_requests = 1
         self.num_streams = ""
         self.number_threads = None
-        self.no_show = True
+        self.no_show = False
         self.utilization_monitors = ''
-        self.keep_aspect_ratio = False
+        self.keep_aspect_ratio = True
         self.color_file = self.FILE_ABSPATH + "/cr.txt"
         self.color_range = {}
         self.resolution = '720p'
@@ -364,8 +364,11 @@ def get_transformed_points(points):
     except rospy.ServiceException:
          rospy.loginfo('Service call failed.')
          
-
-        
+def rs_isOpened(pipeline):
+    frames = pipeline.wait_for_frames()
+    if any(frames):
+        return True
+    return False    
 
 def main():
     #Some setting
@@ -424,7 +427,7 @@ def main():
     if args.resolution == '720p':
         config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 6)
         config.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 10)
-    else if args.resolution == '480p':
+    else:# args.resolution == '480p':
         config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
         config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
     profile = pipeline.start(config)
@@ -461,7 +464,7 @@ def main():
 
     presenter = monitors.Presenter(args.utilization_monitors, 55, 1280, 720)
     
-    while (completed_request_results \
+    while (rs_isOpened(pipeline) or completed_request_results \
            or len(empty_requests) < len(exec_nets[mode.current].requests)) \
           and not callback_exceptions and not rospy.is_shutdown():
         if next_frame_id_to_show in completed_request_results:

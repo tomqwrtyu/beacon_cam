@@ -52,7 +52,7 @@ class arguments:
         self.model = "/home/ubuntu/catkin_ws/src/beacon_cam/src/yolov4/frozen_darknet_yolov4_model.xml"
         self.device = "MYRIAD"
         self.labels = ""#"/home/ubuntu/catkin_ws/src/beacon_cam/src/yolov4/labels_map.txt"
-        self.prob_threshold = [0.9,0.8]
+        self.prob_threshold = [0.8,0.8]
         self.iou_threshold = 0.4
         self.nireq = 1
         self.raw_output_message = False
